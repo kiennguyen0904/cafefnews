@@ -1,0 +1,62 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Aug 25 09:44:32 2024
+
+@author: kiennn
+"""
+
+import os
+import pandas as pd
+from bs4 import BeautifulSoup  
+import logging
+import requests
+import re
+#from newspaper import Article
+#from newspaper import fulltext
+from tqdm import tqdm
+from selenium import webdriver
+import time
+
+logging.basicConfig(filename="crawl.log",level=logging.ERROR)
+public_company_list = pd.read_excel("public_company_list.xlsx")
+
+def get_new_data(symbol):
+    page = 1
+    data_dicts = []
+    
+    while True:
+        url = f'http://s.cafef.vn/Ajax/Events_RelatedNews_New.aspx?symbol={symbol}&floorID=0&configID=0&PageIndex={page}&PageSize=50&Type=2'
+        r = requests.get(url)
+        soup = BeautifulSoup(r.content, "html.parser")
+        data = soup.find("ul", {"class": "News_Title_Link"})
+        
+        if not data:
+            break  # Dừng nếu không có dữ liệu
+        
+        raw = data.find_all('li')
+        if not raw:
+            break  # Dừng nếu danh sách trống
+        
+        for row in raw:
+            row_dict = {
+                'newsdate': row.span.text,
+                'title': row.a.text,
+                'url': "http://s.cafef.vn/" + str(row.a['href']),
+                'Ma CK': symbol
+            }
+            data_dicts.append(row_dict)
+        
+        page += 1  # Chuyển sang trang tiếp theo
+        time.sleep(2)
+    return data_dicts
+
+
+all_datas = pd.DataFrame()
+for ticker in tqdm(public_company_list['Ma CK'].values):
+    tickernews = pd.DataFrame(get_new_data(ticker))
+    all_datas = pd.concat([all_datas, tickernews], ignore_index=True)
+
+all_datas.to_excel('news_data3.xlsx',index=False)
+
+a = all_datas['Ma CK'].unique()
+public_company_list = public_company_list[~public_company_list['Ma CK'].isin(a)]
